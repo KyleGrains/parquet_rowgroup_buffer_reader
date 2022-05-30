@@ -29,4 +29,4 @@ target_link_libraries(test
   PRIVATE /home/kai/dev/arrow/cpp/build/install/lib/libarrow.a 
   PRIVATE /home/kai/dev/arrow/cpp/build/install/lib/libarrow_bundled_dependencies.a 
   PRIVATE /home/kai/dev/arrow/cpp/build/jemalloc_ep-prefix/src/jemalloc_ep/lib/libjemalloc.a
-  )
+)

@@ -28,7 +28,7 @@ using arrow::Buffer;
 using arrow::Status;
 using arrow::Result;
 
-//put this in a shared_ptr
+//put RowGroupBuffer in a shared_ptr
 struct RowGroupBuffer
 {
   char *buffer = nullptr;
@@ -37,15 +37,22 @@ struct RowGroupBuffer
   uint64_t fileoffset = 0;
   uint64_t row_group_index = 0;
   std::shared_ptr<parquet::FileMetaData> metadata;
+
+  RowGroupBuffer() = default;
   ~RowGroupBuffer()
   {
     if(buffer)
       delete[] buffer;
   }
+
+  RowGroupBuffer(const RowGroupBuffer &) = delete;
+  RowGroupBuffer& operator = (const RowGroupBuffer&) = delete;
+  RowGroupBuffer(const RowGroupBuffer &&) = delete;
+  RowGroupBuffer& operator = (const RowGroupBuffer&&) = delete;
 };
 
 /// \class RowGroupBufferReader
-/// \brief Random access zero-copy reads on an arrow::Buffer
+/// \brief Random access zero-copy reads on an RowGroupBuffer
 class RowGroupBufferReader
     : public arrow::io::internal::RandomAccessFileConcurrencyWrapper<RowGroupBufferReader> {
  public:
@@ -217,6 +224,7 @@ void read_parquet_metadata()
   fileMeta.num_of_rowgroups = metadata->num_row_groups();
   fileMeta.rowgroup_offsets.reserve(fileMeta.num_of_rowgroups);
   fileMeta.rowgroup_sizes.reserve(fileMeta.num_of_rowgroups);
+  //get rowgroup offsets
   for(uint64_t i = 0; i < fileMeta.num_of_rowgroups; i++)
   {
     fileMeta.rowgroup_offsets.push_back(metadata->RowGroup(i)->file_offset());
@@ -225,8 +233,10 @@ void read_parquet_metadata()
   for(uint64_t i = 0; i < fileMeta.num_of_rowgroups; i++)
   {
     uint64_t rowgroup_size = 0;
+    //get rowgroup length from substraction between rowgroup offsets
     if(i + 1 < fileMeta.num_of_rowgroups && fileMeta.rowgroup_offsets[i] > 0)
       rowgroup_size = fileMeta.rowgroup_offsets[i + 1] - fileMeta.rowgroup_offsets[i];
+    //get last rowgroup length from substraction betwwen filesize and last rowgroup offset (contains footer length)
     if(i + 1 == fileMeta.num_of_rowgroups)
       rowgroup_size = fileMeta.filesize - fileMeta.rowgroup_offsets[i];
     fileMeta.rowgroup_sizes.push_back(rowgroup_size);
@@ -254,6 +264,7 @@ void read_single_rowgroup_into_buffer(uint64_t row_group_index)
   buffer->filesize = fileMeta.filesize;
   buffer->buffer = new char[buffer->size];
   buffer->metadata = metadata;
+
   PARQUET_ASSIGN_OR_THROW(auto result , infile->ReadAt(metadata->RowGroup(row_group_index)->file_offset(), buffer->size, buffer->buffer));
   if(result != buffer->size)
     std::cerr << ("read buffer size not right");
@@ -270,6 +281,7 @@ void parse_single_rowgroup_from_buffer(uint64_t row_group_index)
   auto reader = parquet::ParquetFileReader::Open(bufferReader, props, buffer->metadata);
   std::unique_ptr<parquet::arrow::FileReader> filereader;
   PARQUET_THROW_NOT_OK(parquet::arrow::FileReader::Make(arrow::default_memory_pool(), std::move(reader), properties, &filereader));
+
   std::cout << "RowGroup index: " << buffer->row_group_index << std::endl;
   for(uint64_t i = 0; i < buffer->metadata->num_columns(); i++)
   {
@@ -302,6 +314,10 @@ int main(int argc, char** argv) {
   catch(std::exception & e)
   {
     std::cerr << "something went wrong: " << e.what() << std::endl;
+  }
+  catch(...)
+  {
+    std::cerr << "something went wrong" << std::endl;
   }
 }
 
